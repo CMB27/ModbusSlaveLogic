@@ -40,9 +40,6 @@ uint8_t ModbusSlaveLogic::getExceptionResponse() {
 
 void ModbusSlaveLogic::processPdu(ModbusADU& adu) {
   _functionCode = adu.getFunctionCode();
-  _address = 0;
-  _quantity = 0;
-  _exceptionResponse = 0;
   switch (_functionCode) {
     case 1:
       _processReadCoils(adu);
@@ -72,13 +69,6 @@ void ModbusSlaveLogic::processPdu(ModbusADU& adu) {
       _prepareExceptionResponse(adu, 1);
       break;
   }
-}
-
-void ModbusSlaveLogic::clearDebugValues() {
-  _functionCode = 0;
-  _address = 0;
-  _quantity = 0;
-  _exceptionResponse = 0;
 }
 
 

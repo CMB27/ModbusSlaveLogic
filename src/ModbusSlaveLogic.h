@@ -17,7 +17,6 @@ class ModbusSlaveLogic {
 
   protected:
     void processPdu(ModbusADU& adu);
-    void clearDebugValues();
 
   private:
     bool *_coils = 0;
