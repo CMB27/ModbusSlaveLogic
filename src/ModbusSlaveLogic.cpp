@@ -20,27 +20,8 @@ void ModbusSlaveLogic::configureInputRegisters(uint16_t inputRegisters[], uint16
   _numInputRegisters = numInputRegisters;
 }
 
-uint8_t ModbusSlaveLogic::getFunctionCode() {
-  return _functionCode;
-}
-
-uint16_t ModbusSlaveLogic::getDataAddress() {
-  return _address;
-}
-
-uint16_t ModbusSlaveLogic::getDataQuantity() {
-  return _quantity;
-}
-
-uint8_t ModbusSlaveLogic::getExceptionResponse() {
-  return _exceptionResponse;
-}
-
-
-
 void ModbusSlaveLogic::processPdu(ModbusADU& adu) {
-  _functionCode = adu.getFunctionCode();
-  switch (_functionCode) {
+  switch (adu.getFunctionCode()) {
     case 1:
       _processReadCoils(adu);
       break;
@@ -66,7 +47,7 @@ void ModbusSlaveLogic::processPdu(ModbusADU& adu) {
       _processWriteMultipleHoldingRegisters(adu);
       break;
     default:
-      _prepareExceptionResponse(adu, 1);
+      adu.prepareExceptionResponse(1);
       break;
   }
 }
@@ -90,47 +71,45 @@ void ModbusSlaveLogic::_processReadInputRegisters(ModbusADU& adu) {
 }
 
 void ModbusSlaveLogic::_processWriteSingleCoil(ModbusADU& adu) {
-  _address = adu.getDataRegister(0);
-  _quantity = 1;
+  uint16_t address = adu.getDataRegister(0);
   uint16_t value = adu.getDataRegister(2);
-  if (!_coils || _numCoils == 0) _prepareExceptionResponse(adu, 1);
-  else if (value != 0 && value != 0xFF00) _prepareExceptionResponse(adu, 3);
-  else if (_address >= _numCoils) _prepareExceptionResponse(adu, 2);
-  else _coils[_address] = value;
+  if (!_coils ||_numCoils == 0) adu.prepareExceptionResponse(1);
+  else if (value != 0 && value != 0xFF00) adu.prepareExceptionResponse(3);
+  else if (address >= _numCoils) adu.prepareExceptionResponse(2);
+  else _coils[address] = value;
 }
 
 void ModbusSlaveLogic::_processWriteSingleHoldingRegister(ModbusADU& adu) {
-  _address = adu.getDataRegister(0);
-  _quantity = 1;
+  uint16_t address = adu.getDataRegister(0);
   uint16_t value = adu.getDataRegister(2);
-  if (!_holdingRegisters || _numHoldingRegisters == 0) _prepareExceptionResponse(adu, 1);
-  else if (_address >= _numHoldingRegisters) _prepareExceptionResponse(adu, 2);
-  else _holdingRegisters[_address] = value;
+  if (!_holdingRegisters || _numHoldingRegisters == 0) adu.prepareExceptionResponse(1);
+  else if (address >= _numHoldingRegisters) adu.prepareExceptionResponse(2);
+  else _holdingRegisters[address] = value;
 }
 
 void ModbusSlaveLogic::_processWriteMultipleCoils(ModbusADU& adu) {
-  _address = adu.getDataRegister(0);
-  _quantity = adu.getDataRegister(2);
-  if (!_coils || _numCoils == 0) _prepareExceptionResponse(adu, 1);
-  else if (_quantity == 0 || _quantity > 1968 || adu.data[4] != div8RndUp(_quantity)) _prepareExceptionResponse(adu, 3);
-  else if (_quantity > _numCoils || _address > (_numCoils - _quantity)) _prepareExceptionResponse(adu, 2);
+  uint16_t startAddress = adu.getDataRegister(0);
+  uint16_t quantity = adu.getDataRegister(2);
+  if (!_coils || _numCoils == 0) adu.prepareExceptionResponse(1);
+  else if (quantity == 0 || quantity > 1968 || adu.data[4] != div8RndUp(quantity)) adu.prepareExceptionResponse(3);
+  else if (quantity > _numCoils || startAddress > (_numCoils - quantity)) adu.prepareExceptionResponse(2);
   else {
-    for (uint16_t i = 0; i < _quantity; i++) {
-      _coils[_address + i] = bitRead(adu.data[5 + (i / 8)], i % 8);
+    for (uint16_t i = 0; i < quantity; i++) {
+      _coils[startAddress + i] = bitRead(adu.data[5 + (i / 8)], i % 8);
     }
     adu.setDataLen(4);
   }
 }
 
 void ModbusSlaveLogic::_processWriteMultipleHoldingRegisters(ModbusADU& adu) {
-  _address = adu.getDataRegister(0);
-  _quantity = adu.getDataRegister(2);
-  if (!_holdingRegisters || _numHoldingRegisters == 0) _prepareExceptionResponse(adu, 1);
-  else if (_quantity == 0 || _quantity > 123 || adu.data[4] != (_quantity * 2)) _prepareExceptionResponse(adu, 3);
-  else if (_quantity > _numHoldingRegisters || _address > (_numHoldingRegisters - _quantity)) _prepareExceptionResponse(adu, 2);
+  uint16_t startAddress = adu.getDataRegister(0);
+  uint16_t quantity = adu.getDataRegister(2);
+  if (!_holdingRegisters || _numHoldingRegisters == 0) adu.prepareExceptionResponse(1);
+  else if (quantity == 0 || quantity > 123 || adu.data[4] != (quantity * 2)) adu.prepareExceptionResponse(3);
+  else if (quantity > _numHoldingRegisters || startAddress > (_numHoldingRegisters - quantity)) adu.prepareExceptionResponse(2);
   else {
-    for (uint16_t i = 0; i < _quantity; i++) {
-      _holdingRegisters[_address + i] = adu.getDataRegister(5 + (i * 2));
+    for (uint16_t i = 0; i < quantity; i++) {
+      _holdingRegisters[startAddress + i] = adu.getDataRegister(5 + (i * 2));
     }
     adu.setDataLen(4);
   }
@@ -140,18 +119,18 @@ void ModbusSlaveLogic::_processWriteMultipleHoldingRegisters(ModbusADU& adu) {
 
 void ModbusSlaveLogic::_processReadValues(ModbusADU& adu, bool buf[], uint16_t bufSize) {
   if (adu.getUnitId() == 0) return;
-  _address = adu.getDataRegister(0);
-  _quantity = adu.getDataRegister(2);
-  if (!buf || bufSize == 0) _prepareExceptionResponse(adu, 1);
-  else if (_quantity == 0 || _quantity > 2000) _prepareExceptionResponse(adu, 3);
-  else if (_quantity > bufSize || _address > (bufSize - _quantity)) _prepareExceptionResponse(adu, 2);
+  uint16_t startAddress = adu.getDataRegister(0);
+  uint16_t quantity = adu.getDataRegister(2);
+  if (!buf || bufSize == 0) adu.prepareExceptionResponse(1);
+  else if (quantity == 0 || quantity > 2000) adu.prepareExceptionResponse(3);
+  else if (quantity > bufSize || startAddress > (bufSize - quantity)) adu.prepareExceptionResponse(2);
   else {
-    uint8_t byteCount = div8RndUp(_quantity);
+    uint8_t byteCount = div8RndUp(quantity);
     adu.data[0] = byteCount;
     for (uint16_t i = 0; i < (byteCount * 8); i++) {
       uint8_t byteIndex = 1 + (i / 8);
       uint8_t bitIndex = i % 8;
-      if (i < _quantity) bitWrite(adu.data[byteIndex], bitIndex, buf[_address + i]);
+      if (i < quantity) bitWrite(adu.data[byteIndex], bitIndex, buf[startAddress + i]);
       else bitClear(adu.data[byteIndex], bitIndex);
     }
     adu.setDataLen(1 + byteCount);
@@ -160,24 +139,17 @@ void ModbusSlaveLogic::_processReadValues(ModbusADU& adu, bool buf[], uint16_t b
 
 void ModbusSlaveLogic::_processReadValues(ModbusADU& adu, uint16_t buf[], uint16_t bufSize) {
   if (adu.getUnitId() == 0) return;
-  _address = adu.getDataRegister(0);
-  _quantity = adu.getDataRegister(2);
-  if (!buf || bufSize == 0) _prepareExceptionResponse(adu, 1);
-  else if (_quantity == 0 || _quantity > 125) _prepareExceptionResponse(adu, 3);
-  else if (_quantity > bufSize || _address > (bufSize - _quantity)) _prepareExceptionResponse(adu, 2);
+  uint16_t startAddress = adu.getDataRegister(0);
+  uint16_t quantity = adu.getDataRegister(2);
+  if (!buf || bufSize == 0) adu.prepareExceptionResponse(1);
+  else if (quantity == 0 || quantity > 125) adu.prepareExceptionResponse(3);
+  else if (quantity > bufSize || startAddress > (bufSize - quantity)) adu.prepareExceptionResponse(2);
   else {
-    uint8_t byteCount = _quantity * 2;
+    uint8_t byteCount = quantity * 2;
     adu.data[0] = byteCount;
-    for (uint16_t i = 0; i < _quantity; i++) {
-      adu.setDataRegister(1 + (i * 2), buf[_address + i]);
+    for (uint16_t i = 0; i < quantity; i++) {
+      adu.setDataRegister(1 + (i * 2), buf[startAddress + i]);
     }
     adu.setDataLen(1 + byteCount);
   }
-}
-
-
-
-void ModbusSlaveLogic::_prepareExceptionResponse(ModbusADU& adu, uint8_t exceptionCode) {
-  _exceptionResponse = exceptionCode;
-  adu.prepareExceptionResponse(_exceptionResponse);
 }
