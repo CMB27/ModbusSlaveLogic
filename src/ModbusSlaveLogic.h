@@ -11,7 +11,6 @@ class ModbusSlaveLogic {
     void configureHoldingRegisters(uint16_t holdingRegisters[], uint16_t numHoldingRegisters);
     void configureInputRegisters(uint16_t inputRegisters[], uint16_t numInputRegisters);
     void processPdu(ModbusADU& adu);
-    
 
   private:
     bool *_coils = 0;
