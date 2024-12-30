@@ -2,7 +2,7 @@
 
 Modbus is an industrial communication protocol. The full details of the Modbus protocol can be found at [modbus.org](https://modbus.org). A good summary can also be found on [Wikipedia](https://en.wikipedia.org/wiki/Modbus).
 
-This is an arduino library for processing Modbus requests. It enables an Arduino, or arduino compatible, board to process requests from a Modbus master/client and formulate an appropriate response based on the library instance's configuration.  
+This is an Arduino library for processing Modbus requests. It enables an Arduino, or arduino compatible, board to process requests from a Modbus master/client and formulate an appropriate response based on the library instance's configuration.  
 This library is able to service the following function codes:  
 - 1 (Read Coils)
 - 2 (Read Discrete Inputs)
