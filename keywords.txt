@@ -3,4 +3,9 @@ configureCoils	KEYWORD2
 configureDiscreteInputs	KEYWORD2		
 configureHoldingRegisters	KEYWORD2		
 configureInputRegisters	KEYWORD2		
+configureDeviceIdentification	KEYWORD2		
+setVendorUrl	KEYWORD2		
+setProductName	KEYWORD2		
+setModelName	KEYWORD2		
+setApplicationName	KEYWORD2		
 processPdu	KEYWORD2		
