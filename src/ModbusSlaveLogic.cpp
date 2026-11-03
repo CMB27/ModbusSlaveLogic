@@ -20,6 +20,30 @@ void ModbusSlaveLogic::configureInputRegisters(uint16_t inputRegisters[], uint16
   _numInputRegisters = numInputRegisters;
 }
 
+void ModbusSlaveLogic::configureDeviceIdentification(const __FlashStringHelper *vendorName, const __FlashStringHelper *productCode, const __FlashStringHelper *version) {
+  _deviceObjects[VENDOR_NAME] = vendorName;
+  _deviceObjects[PRODUCT_CODE] = productCode;
+  _deviceObjects[MAJOR_MINOR_REVISION] = version;
+  // This is a trick to allow the linker to drop the device identification code if it isn't configured
+  _deviceIdentificationHandler = _handleDeviceIdentification;
+}
+
+void ModbusSlaveLogic::setVendorUrl(const __FlashStringHelper *vendorUrl) {
+  _deviceObjects[VENDOR_URL] = vendorUrl;
+}
+
+void ModbusSlaveLogic::setProductName(const __FlashStringHelper *productName) {
+  _deviceObjects[PRODUCT_NAME] = productName;
+}
+
+void ModbusSlaveLogic::setModelName(const __FlashStringHelper *modelName) {
+  _deviceObjects[MODEL_NAME] = modelName;
+}
+
+void ModbusSlaveLogic::setApplicationName(const __FlashStringHelper *applicationName) {
+  _deviceObjects[USER_APPLICATION_NAME] = applicationName;
+}
+
 void ModbusSlaveLogic::processPdu(ModbusADU& adu) {
   switch (adu.getFunctionCode()) {
     case 1:
@@ -45,6 +69,10 @@ void ModbusSlaveLogic::processPdu(ModbusADU& adu) {
       break;
     case 16:
       _processWriteMultipleHoldingRegisters(adu);
+      break;
+    case 43:
+      if (_deviceIdentificationHandler) _deviceIdentificationHandler(*this, adu);
+      else adu.prepareExceptionResponse(1);
       break;
     default:
       adu.prepareExceptionResponse(1);
@@ -115,7 +143,62 @@ void ModbusSlaveLogic::_processWriteMultipleHoldingRegisters(ModbusADU& adu) {
   }
 }
 
+void ModbusSlaveLogic::_processReadDeviceIdentification(ModbusADU& adu) {
+  if (adu.getUnitId() == 0) return;
+  uint8_t *data = adu.data;
+  uint8_t meiType = data[0];
+  uint8_t readCode = data[1];
+  uint8_t objectId = data[2];
+  bool objectExists = objectId < NUM_DEVICE_OBJECTS && _deviceObjects[objectId];
+  if (meiType != 14 || !_deviceObjects[VENDOR_NAME]) adu.prepareExceptionResponse(1);
+  else if (adu.getDataLen() != 3 || readCode < 1 || readCode > 4) adu.prepareExceptionResponse(3);
+  else if (readCode == 4 && !objectExists) adu.prepareExceptionResponse(2);
+  else {
+    bool hasRegularObjects = false;
+    for (uint8_t id = VENDOR_URL; id < NUM_DEVICE_OBJECTS; id++) {
+      if (_deviceObjects[id]) hasRegularObjects = true;
+    }
+    data[2] = hasRegularObjects ? 0x82 : 0x81; // conformity level
+    data[3] = 0; // more follows
+    data[4] = 0; // next object id
+    data[5] = 0; // number of objects
+    uint16_t dataLen = 6;
+    if (readCode == 4) _addDeviceObject(data, dataLen, objectId);
+    else {
+      uint8_t lastId = USER_APPLICATION_NAME;
+      if (readCode == 1) lastId = MAJOR_MINOR_REVISION;
+      uint8_t firstId = VENDOR_NAME;
+      if (objectExists && objectId <= lastId) firstId = objectId;
+      for (uint8_t id = firstId; id <= lastId; id++) {
+        if (_deviceObjects[id] && !_addDeviceObject(data, dataLen, id)) {
+          data[3] = 0xFF;
+          data[4] = id;
+          break;
+        }
+      }
+    }
+    adu.setDataLen(dataLen);
+  }
+}
 
+
+
+void ModbusSlaveLogic::_handleDeviceIdentification(ModbusSlaveLogic& logic, ModbusADU& adu) {
+  logic._processReadDeviceIdentification(adu);
+}
+
+bool ModbusSlaveLogic::_addDeviceObject(uint8_t *data, uint16_t& dataLen, uint8_t objectId) {
+  PGM_P value = reinterpret_cast<PGM_P>(_deviceObjects[objectId]);
+  uint16_t valueLen = strlen_P(value);
+  if (valueLen > MAX_OBJECT_LEN) valueLen = MAX_OBJECT_LEN;
+  if (dataLen + 2 + valueLen > MAX_DATA_LEN) return false;
+  data[dataLen++] = objectId;
+  data[dataLen++] = valueLen;
+  memcpy_P(data + dataLen, value, valueLen);
+  dataLen += valueLen;
+  data[5]++; // number of objects
+  return true;
+}
 
 void ModbusSlaveLogic::_processReadValues(ModbusADU& adu, bool buf[], uint16_t bufSize) {
   if (adu.getUnitId() == 0) return;
